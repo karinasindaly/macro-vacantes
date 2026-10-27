@@ -67,7 +67,7 @@ function toggleComparativo(){
   const arrow=document.getElementById('comp-arrow');
   const isOpen=content.style.maxHeight&&content.style.maxHeight!=='0px';
   if(isOpen){content.style.maxHeight='0';content.style.opacity='0';arrow.style.transform='rotate(0deg)';}
-  else{content.style.maxHeight='2600px';content.style.opacity='1';arrow.style.transform='rotate(180deg)';}
+  else{content.style.maxHeight='2600px';content.style.opacity='1';arrow.style.transform='rotate(180deg)';compRefrescarHistorial();}
 }
 
 function compDragOver(e){e.preventDefault();document.getElementById('comp-upload').classList.add('drag-over')}
@@ -115,6 +115,46 @@ function processCompFile(file){
   reader.readAsArrayBuffer(file);
 }
 
+// ── Historial guardado en PostgreSQL ──
+// Permite armar el comparativo con reportes ya guardados, sin volver a
+// subir cada Excel.
+function snapshotDesdeReporte(rep){
+  const allPos=new Set(),posZonaMap=new Map(),rows=[];
+  rep.posiciones.forEach(p=>{
+    const zona=normZona(p.complejo);
+    if(p.posicion){allPos.add(p.posicion);posZonaMap.set(p.posicion,zona);}
+    if((p.estado||'').trim().toUpperCase()==='VACANTE'){
+      rows.push({_idx:rows.length,posicion:p.posicion,descripcion:p.descripcion,zona,
+        estatus:p.semaforo||'Verde',dias:p.dias||0,clasificacion:p.clasificacion||'—',localidad:p.localidad||'—'});
+    }
+  });
+  return{id:'db_'+rep.id,label:rep.etiqueta,fileName:rep.nombre_archivo,rows,
+    totalPos:rep.total_posiciones,totalOcup:rep.total_ocupadas,allPos,posZonaMap};
+}
+async function compRefrescarHistorial(){
+  const box=document.getElementById('comp-historial');
+  if(!box)return;
+  if(!API.online){box.innerHTML='<span style="color:#8a8f9b;font-size:11.5px">Historial no disponible: inicia el backend para usar los reportes guardados.</span>';return;}
+  try{
+    const lista=await API.listarReportes();
+    if(!lista.length){box.innerHTML='<span style="color:#8a8f9b;font-size:11.5px">Aún no hay reportes guardados en la base de datos.</span>';return;}
+    box.innerHTML='<span class="zona-label">Historial guardado</span>'+lista.map(r=>{
+      const usado=comparativoSnapshots.some(s=>s.id==='db_'+r.id);
+      return`<button class="zbtn${usado?' z-active':''}" onclick="compAgregarDesdeHistorial(${r.id})" title="${escHtml(r.nombre_archivo)}">${escHtml(r.etiqueta)} <span class="zona-count">${r.total_vacantes}</span></button>`;
+    }).join('');
+  }catch(e){box.innerHTML='<span style="color:#9F1239;font-size:11.5px">No se pudo leer el historial: '+escHtml(e.message)+'</span>';}
+}
+async function compAgregarDesdeHistorial(id){
+  compClearError();
+  if(comparativoSnapshots.some(s=>s.id==='db_'+id)){removeCompSnapshot('db_'+id);compRefrescarHistorial();return;}
+  if(comparativoSnapshots.length>=5){compShowError('Ya tienes 5 reportes cargados (el máximo). Quita uno para agregar otro.');return;}
+  try{
+    const rep=await API.obtenerReporte(id);
+    comparativoSnapshots.push(snapshotDesdeReporte(rep));
+    sortCompSnapshots();renderComparativo();compRefrescarHistorial();
+  }catch(e){compShowError('No se pudo cargar el reporte: '+e.message);}
+}
+
 function compPeriodKey(label){
   const s=String(label||'');
   const mYear=s.match(/(\d{4})/);
@@ -141,6 +181,7 @@ function sortCompSnapshots(){
 function removeCompSnapshot(id){
   comparativoSnapshots=comparativoSnapshots.filter(s=>s.id!==id);
   renderComparativo();
+  compRefrescarHistorial();
 }
 
 function renameCompSnapshot(id,val){
@@ -625,6 +666,7 @@ function handleFile(file){
       document.getElementById('export-bar').style.display='flex';
       document.getElementById('analytics-bar').style.display='block';
       buildZonaBar();refresh();
+      cargarAccionesSemaforo();
     }catch(err){showError('Error al procesar: '+err.message)}
   };
   reader.readAsArrayBuffer(file);
@@ -738,7 +780,24 @@ const COLS=[
 
 function rowKey(r){return 'r_'+(r.posicion||'')+r._idx}
 function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function saveComentario(key,field,val){if(!comentarios[key])comentarios[key]={plan:'',responsable:'',fecha:''};comentarios[key][field]=val;}
+function saveComentario(key,field,val){
+  if(!comentarios[key])comentarios[key]={plan:'',responsable:'',fecha:''};
+  comentarios[key][field]=val;
+  // Persistencia: se guarda por número de posición en PostgreSQL
+  const row=allRows.find(r=>rowKey(r)===key);
+  if(row)API.guardarAccion('semaforo',row.posicion,comentarios[key]);
+}
+// Recupera desde la API los planes de acción ya capturados (también los de
+// semanas anteriores, porque se guardan por número de posición).
+async function cargarAccionesSemaforo(){
+  const mapa=await API.listarAcciones('semaforo');
+  if(!Object.keys(mapa).length)return;
+  allRows.forEach(r=>{
+    const a=mapa[r.posicion];
+    if(a)comentarios[rowKey(r)]={plan:a.plan||'',responsable:a.responsable||'',fecha:a.fecha_compromiso||''};
+  });
+  refresh();
+}
 
 const sortState={};
 function renderAcord(color){
@@ -1182,6 +1241,7 @@ function handleDetFile(file){
       document.getElementById('det-dashboard').style.display='block';
       detApplyFilters();
       projectLoadFromDetalle(file.name);
+      API.guardarReporte(file.name,detAllRows).then(()=>compRefrescarHistorial());
     }catch(err){detShowError('Error al procesar: '+err.message);console.error(err);}
   };
   reader.readAsArrayBuffer(file);
@@ -1453,6 +1513,12 @@ function projectLoadFromDetalle(fileName){
   if(empty)empty.style.display='none';
   if(dash)dash.style.display='block';
   projectApplyFilters();
+  API.listarAcciones('proyecto').then(mapa=>{
+    if(!Object.keys(mapa).length)return;
+    Object.entries(mapa).forEach(([k,a])=>{if(projectActions[k]===undefined)projectActions[k]=a.plan||'';});
+    projectRows.forEach(r=>{if(projectActions[r.key]!==undefined)r.accion=projectActions[r.key];});
+    projectRenderTable();
+  });
 }
 
 // Cada posición (Área 2M/4M) es su propia fila — ya NO se agrupan varias
@@ -1633,6 +1699,7 @@ function projectSaveAction(key,val){
   projectActions[key]=val;
   const row=projectRows.find(r=>r.key===key);
   if(row)row.accion=val;
+  API.guardarAccion('proyecto',key,{plan:val});
 }
 
 function projectRenderTable(){

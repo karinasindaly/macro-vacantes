@@ -4,7 +4,7 @@ Dashboard para el seguimiento semanal de vacantes de Pilgrim's (Semáforo de Vac
 
 | Capa | Tecnología | Qué hace |
 |---|---|---|
-| Frontend | HTML, CSS, JavaScript, SheetJS, Chart.js | Lee el Excel semanal, calcula el semáforo y muestra los tableros |
+| Frontend | HTML, CSS, JavaScript, SheetJS, Chart.js (incluidas en `frontend/vendor/`) | Lee el Excel semanal, calcula el semáforo y muestra los tableros |
 | Backend | Python 3.11+, FastAPI, SQLAlchemy | API REST que guarda y consulta reportes y planes de acción |
 | Base de datos | PostgreSQL 16 | Historial de reportes, posiciones y planes de acción |
 
@@ -12,8 +12,7 @@ Dashboard para el seguimiento semanal de vacantes de Pilgrim's (Semáforo de Vac
 
 | Nombre | Rol en el proyecto | GitHub |
 |---|---|---|
-| Sindaly | _(completar)_ | @_(usuario)_ |
-| _(nombre)_ | _(completar)_ | @_(usuario)_ |
+| Sindaly | Desarrollo del proyecto (frontend, backend y base de datos) | [@karinasindaly](https://github.com/karinasindaly) |
 
 ---
 
@@ -44,6 +43,7 @@ macro-vacantes/
 │   └── js/
 │       ├── app.js                    ← lógica del dashboard
 │       └── api.js                    ← cliente de la API REST
+│   └── vendor/                       ← librerías de terceros en local (funciona sin internet)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                   ← arranque de FastAPI, CORS, sirve el frontend
@@ -71,7 +71,7 @@ macro-vacantes/
 
 ### 1. Clonar el repositorio
 ```bash
-git clone https://github.com/<usuario>/macro-vacantes.git
+git clone https://github.com/karinasindaly/macro-vacantes.git
 cd macro-vacantes
 ```
 
@@ -160,3 +160,5 @@ Cada etapa quedó en su propio commit (`git log --oneline`):
 5. Pruebas automáticas
 6. Integración frontend ↔ API
 7. Documentación
+8. Librerías en local para funcionar sin internet
+9. README actualizado con el repositorio y participantes

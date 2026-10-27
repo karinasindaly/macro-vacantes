@@ -1,0 +1,12 @@
+# Datos confidenciales: nunca subir reportes reales
+*.xlsx
+*.xls
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+# Sistema
+.DS_Store
+Thumbs.db

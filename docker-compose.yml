@@ -1,0 +1,15 @@
+# Levanta PostgreSQL para el proyecto:  docker compose up -d
+services:
+  db:
+    image: postgres:16
+    container_name: vacantes_db
+    environment:
+      POSTGRES_USER: vacantes
+      POSTGRES_PASSWORD: vacantes
+      POSTGRES_DB: vacantes_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

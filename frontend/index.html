@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semáforo de Vacantes — Pilgrims</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo-box">Pilgrims</div>
+    <div class="header-title">Atraccion de Talento<span>/ Control de Vacantes</span></div>
+  </div>
+</header>
+
+<!-- ── TABS ── -->
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('semaforo',this)" id="tab-btn-semaforo">
+    Semáforo de Vacantes
+  </button>
+  
+  <button class="tab-btn" onclick="switchTab('detalle',this)" id="tab-btn-detalle">
+    Detalle de Posiciones
+  </button>
+  <button class="tab-btn" onclick="switchTab('proyectos',this)" id="tab-btn-proyectos">
+    Análisis de Proyectos
+  </button>
+</div>
+
+<main>
+
+<!-- ═══════════════════════ PESTAÑA 1: SEMÁFORO ═══════════════════════ -->
+<div class="tab-panel active" id="panel-semaforo">
+
+  <!-- UPLOAD -->
+  <div id="upload-section"
+    onclick="document.getElementById('fileInput').click()"
+    ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+    <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(event.target.files[0])">
+    <p class="upload-title">Carga el archivo de vacantes</p>
+    <p class="upload-sub">
+      Arrastra tu Excel aquí o haz clic para seleccionarlo &mdash; <strong>.xlsx / .xls</strong><br>
+      <small style="color:#aaa">Con esta única carga se analizan automáticamente las 3 pestañas: Semáforo, Detalle de Posiciones y Status de Proyectos</small>
+    </p>
+    <button class="btn-upload" onclick="event.stopPropagation();document.getElementById('fileInput').click()">Seleccionar archivo</button>
+  </div>
+
+  <div id="file-badge">
+    <span>Archivo:</span>
+    <span class="fname" id="fname-text"></span>
+    <button id="btn-reset" onclick="resetAllData()" title="Cargar otro">✕</button>
+  </div>
+  <div id="error-box"></div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+    <div id="urgente-warn" style="display:none;background:#FFF7ED;color:#92400E;border:1px solid #FDE68A;border-radius:10px;padding:10px 16px;font-size:12px;margin-bottom:1rem"></div>
+
+    <div class="zona-bar" id="zona-bar">
+      <span class="zona-label">Complejo</span>
+      <button class="zbtn z-active" onclick="setZona('',this)" id="zbtn-todas">Todas <span class="zona-count" id="zc-todas">0</span></button>
+    </div>
+    <div id="zona-debug" style="display:none;background:#FFF7ED;color:#92400E;border:1px solid #FDE68A;border-radius:8px;padding:8px 14px;font-size:11px;margin-bottom:.8rem"></div>
+
+    <div class="resumen-box" id="resumen-box">
+      <div class="resumen-item r-total">
+        <div class="resumen-lbl">Total de Posiciones</div>
+        <div class="resumen-num" id="r-total-pos">0</div>
+        <div class="resumen-sub" id="r-total-sub">En el archivo cargado</div>
+      </div>
+      <div class="resumen-item r-ocupadas">
+        <div class="resumen-lbl">Posiciones Ocupadas</div>
+        <div class="resumen-num" id="r-ocupadas">0</div>
+        <div class="resumen-sub">Estado: Ocupada</div>
+      </div>
+      <div class="resumen-item r-vacantes">
+        <div class="resumen-lbl">Posiciones Vacantes</div>
+        <div class="resumen-num" id="r-vacantes">0</div>
+        <div class="resumen-sub">Disponibles (no ocupadas)</div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi k-total" style="cursor:default">
+        <div class="kpi-lbl">Total Vacantes Disponibles</div>
+        <div class="kpi-num" id="s-total">0</div>
+        <div class="kpi-sub" id="s-total-sub">Total vacantes disponibles</div>
+      </div>
+      <div class="kpi k-rojo" id="kpi-rojo" onclick="toggleAcord('rojo')">
+        <div class="kpi-lbl">Rojo &mdash; Criticas</div>
+        <div class="kpi-num" id="s-rojo">0</div>
+        <div class="kpi-sub" id="s-rojo-sub">Vacantes disponibles</div>
+        <div class="kpi-hint">ver vacantes</div>
+      </div>
+      <div class="kpi k-amarillo" id="kpi-amarillo" onclick="toggleAcord('amarillo')">
+        <div class="kpi-lbl">Amarillo &mdash; Por vencer</div>
+        <div class="kpi-num" id="s-amarillo">0</div>
+        <div class="kpi-sub" id="s-amarillo-sub">Vacantes disponibles</div>
+        <div class="kpi-hint">ver vacantes</div>
+      </div>
+      <div class="kpi k-verde" id="kpi-verde" onclick="toggleAcord('verde')">
+        <div class="kpi-lbl">Verde &mdash; Vigentes</div>
+        <div class="kpi-num" id="s-verde">0</div>
+        <div class="kpi-sub" id="s-verde-sub">Vacantes disponibles</div>
+        <div class="kpi-hint">ver vacantes</div>
+      </div>
+    </div>
+
+    <!-- ACORDEONES SEMÁFORO -->
+    <div class="acord-wrap v-rojo" id="acord-rojo">
+      <div class="acord-inner">
+        <div class="acord-header">
+          <span class="acord-title">Vacantes Criticas &mdash; Rojo</span>
+          <span class="acord-count" id="acord-rojo-count">0 vacantes</span>
+        </div>
+        <div class="acord-toolbar">
+          <div class="acord-search"><input type="text" placeholder="Buscar por posicion, localidad, estado, jefe RH..." oninput="filterAcord('rojo',this.value)" id="search-rojo"></div>
+        </div>
+        <div class="tbl-wrap"><table><thead><tr id="thead-rojo"></tr></thead><tbody id="tbody-rojo"></tbody></table></div>
+        <div class="acord-pag" id="pag-rojo">
+          <span id="pag-rojo-info"></span>
+          <div class="pag-btns">
+            <button onclick="pageAcord('rojo',-1)" id="prev-rojo">Anterior</button>
+            <button onclick="pageAcord('rojo',1)" id="next-rojo">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="acord-wrap v-amarillo" id="acord-amarillo">
+      <div class="acord-inner">
+        <div class="acord-header">
+          <span class="acord-title">Vacantes por Vencer &mdash; Amarillo</span>
+          <span class="acord-count" id="acord-amarillo-count">0 vacantes</span>
+        </div>
+        <div class="acord-toolbar">
+          <div class="acord-search"><input type="text" placeholder="Buscar por posicion, localidad, estado, jefe RH..." oninput="filterAcord('amarillo',this.value)" id="search-amarillo"></div>
+        </div>
+        <div class="tbl-wrap"><table><thead><tr id="thead-amarillo"></tr></thead><tbody id="tbody-amarillo"></tbody></table></div>
+        <div class="acord-pag" id="pag-amarillo">
+          <span id="pag-amarillo-info"></span>
+          <div class="pag-btns">
+            <button onclick="pageAcord('amarillo',-1)" id="prev-amarillo">Anterior</button>
+            <button onclick="pageAcord('amarillo',1)" id="next-amarillo">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="acord-wrap v-verde" id="acord-verde">
+      <div class="acord-inner">
+        <div class="acord-header">
+          <span class="acord-title">Vacantes Vigentes &mdash; Verde</span>
+          <span class="acord-count" id="acord-verde-count">0 vacantes</span>
+        </div>
+        <div class="acord-toolbar">
+          <div class="acord-search"><input type="text" placeholder="Buscar por posicion, localidad, estado, jefe RH..." oninput="filterAcord('verde',this.value)" id="search-verde"></div>
+        </div>
+        <div class="tbl-wrap"><table><thead><tr id="thead-verde"></tr></thead><tbody id="tbody-verde"></tbody></table></div>
+        <div class="acord-pag" id="pag-verde">
+          <span id="pag-verde-info"></span>
+          <div class="pag-btns">
+            <button onclick="pageAcord('verde',-1)" id="prev-verde">Anterior</button>
+            <button onclick="pageAcord('verde',1)" id="next-verde">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL ANALÍTICO -->
+    <div id="analytics-bar" style="display:none;background:var(--p-white);border:2px solid var(--p-border);border-radius:14px;box-shadow:var(--shadow);margin-bottom:1.4rem;overflow:hidden">
+      <button onclick="toggleAnalytics()" id="analytics-toggle"
+        style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:1rem 1.4rem;background:linear-gradient(135deg,var(--p-blue) 0%,var(--p-blue-mid) 60%,var(--p-red) 100%);border:none;cursor:pointer;color:#fff">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="text-align:left">
+            <div style="font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;font-family:'Abadi','Century Gothic','Trebuchet MS',Arial,sans-serif">Análisis de Vacantes</div>
+            <div style="font-size:11px;opacity:.75;font-family:'Abadi','Century Gothic','Trebuchet MS',Arial,sans-serif">Distribución por tipo de justificación, estatus, localidad, grupo y área</div>
+          </div>
+        </div>
+        <span id="analytics-arrow" style="font-size:18px;transition:transform .3s">▼</span>
+      </button>
+      <div id="analytics-content" style="max-height:0;overflow:hidden;transition:max-height .4s ease,opacity .3s ease;opacity:0">
+        <div style="padding:1.4rem 1.4rem 1.8rem">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:18px">
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.1rem">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:.8rem">Tipo de Justificación</div>
+              <div class="chart-flex-row" style="height:200px">
+                <div class="chart-canvas-col" style="position:relative"><canvas id="chart-tipojust"></canvas></div>
+                <div class="chart-side-stats" id="chart-tipojust-stats"></div>
+              </div>
+            </div>
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.1rem">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:.8rem">ESTATUS (Vigente / Vencida)</div>
+              <div class="chart-flex-row" style="height:200px">
+                <div class="chart-canvas-col" style="position:relative"><canvas id="chart-estatus"></canvas></div>
+                <div class="chart-side-stats" id="chart-estatus-stats"></div>
+              </div>
+            </div>
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.1rem">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:.8rem">Top Localidades</div>
+              <div class="chart-scroll-y"><div style="position:relative;height:200px"><canvas id="chart-localidad"></canvas></div></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.1rem">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:.8rem">Descripción de Grupos</div>
+              <div class="chart-flex-row" style="height:220px">
+                <div class="chart-canvas-col" style="position:relative"><canvas id="chart-grupos"></canvas></div>
+                <div class="chart-side-stats" id="chart-grupos-stats"></div>
+              </div>
+            </div>
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.1rem">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:.8rem">Descripción de Áreas (Clasificación)</div>
+              <div class="chart-flex-row" style="height:220px">
+                <div class="chart-canvas-col" style="position:relative"><canvas id="chart-areas"></canvas></div>
+                <div class="chart-side-stats" id="chart-areas-stats"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BARRA EXPORTAR -->
+    <div class="export-bar" id="export-bar" style="display:none">
+      <div>
+        <div class="export-bar-title">Exportar reporte de vacantes</div>
+        <div class="export-bar-sub">Genera el reporte PDF con vacantes Rojo, Amarillo y Verde (vigentes), incluyendo plan de accion, responsable y fecha</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn-export-word" id="btn-export-pdf" onclick="exportarPDF()" style="background:#9F1239">&#128438; Exportar PDF</button>
+      </div>
+    </div>
+
+  </div><!-- /dashboard -->
+
+  <!-- ═══ COMPARATIVO SEMANAL ═══ -->
+  <div class="comp-card" id="comp-card">
+    <button class="comp-toggle" onclick="toggleComparativo()" id="comp-toggle-btn">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="text-align:left">
+          <div class="comp-toggle-title">Comparativo Semanal</div>
+          <div class="comp-toggle-sub">Carga de 2 a 5 reportes para comparar tendencias semana a semana</div>
+        </div>
+      </div>
+      <span id="comp-arrow" style="font-size:18px;transition:transform .3s">▼</span>
+    </button>
+    <div id="comp-content" style="max-height:0;overflow:hidden;transition:max-height .4s ease,opacity .3s ease;opacity:0">
+      <div style="padding:1.2rem 1.4rem 1.6rem">
+
+        <div id="comp-upload" class="comp-upload"
+          onclick="document.getElementById('compFileInput').click()"
+          ondragover="compDragOver(event)" ondragleave="compDragLeave(event)" ondrop="compDrop(event)">
+          <input type="file" id="compFileInput" accept=".xlsx,.xls" multiple onchange="handleCompFiles(event.target.files)">
+          
+          <p style="font-weight:800;color:var(--p-blue);margin:.4rem 0 .2rem">Arrastra aquí de 2 a 5 reportes semanales</p>
+          <p style="font-size:11.5px;color:#8a8f9b">Cada archivo debe tener la hoja "Rep Posiciones" &mdash; puedes seleccionar varios a la vez o agregarlos uno por uno</p>
+        </div>
+        <div id="comp-error" style="display:none;background:#FEF2F2;color:#9F1239;border:1px solid #FECDD3;border-radius:8px;padding:8px 14px;font-size:12px;margin-top:.7rem"></div>
+
+        <div id="comp-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:1rem"></div>
+
+        <div id="comp-results" style="display:none;margin-top:1.4rem">
+          <div id="comp-zona-bar" class="zona-bar" style="margin-bottom:1.2rem"></div>
+
+          <div style="display:flex;flex-direction:column;gap:22px;margin-bottom:22px">
+
+            <div style="font-size:10.5px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#8a8f9b;border-bottom:2px solid var(--p-border);padding-bottom:6px;margin-bottom:-6px">Tendencia semana a semana <span id="comp-zona-tag" style="text-transform:none;font-weight:700;letter-spacing:0"></span></div>
+
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.4rem">
+              <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:1rem">Vacantes por Semáforo y Total &mdash; Tendencia</div>
+              <div class="chart-flex-row" style="height:300px">
+                <div class="chart-canvas-col" style="position:relative"><canvas id="chart-comp-semaforo"></canvas></div>
+                <div class="chart-side-stats" id="chart-comp-semaforo-stats"></div>
+              </div>
+            </div>
+
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.4rem">
+              <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:1rem">Vacantes por Complejo &mdash; Tendencia</div>
+              <div class="chart-flex-row" style="height:320px">
+                <div class="chart-canvas-col" style="position:relative"><canvas id="chart-comp-zona-group"></canvas></div>
+                <div class="chart-side-stats" id="chart-comp-zona-group-stats"></div>
+              </div>
+            </div>
+
+            <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.4rem">
+              <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:1rem">Promedio de Días Sin Ocupar &mdash; Tendencia</div>
+              <div style="position:relative;height:260px"><canvas id="chart-comp-dias-trend"></canvas></div>
+            </div>
+
+            <div style="font-size:10.5px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#8a8f9b;border-bottom:2px solid var(--p-border);padding-bottom:6px;margin:10px 0 -6px">Fotografía de <span id="comp-last-label-3">la última semana</span></div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+              <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.4rem">
+                <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:1rem">Distribución de Posiciones por Complejo &mdash; <span id="comp-last-label-1">última semana</span></div>
+                <div class="chart-flex-row" style="height:280px">
+                  <div class="chart-canvas-col" style="position:relative"><canvas id="chart-comp-pie-semaforo"></canvas></div>
+                  <div class="chart-side-stats" id="chart-comp-pie-semaforo-stats"></div>
+                </div>
+              </div>
+              <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.4rem">
+                <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:1rem">Distribución de Vacantes por Complejo &mdash; <span id="comp-last-label-2">última semana</span></div>
+                <div class="chart-flex-row" style="height:280px">
+                  <div class="chart-canvas-col" style="position:relative"><canvas id="chart-comp-dona-zona"></canvas></div>
+                  <div class="chart-side-stats" id="chart-comp-dona-zona-stats"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tbl-wrap">
+            <table id="comp-table"><thead><tr id="comp-table-head"></tr></thead><tbody id="comp-table-body"></tbody></table>
+          </div>
+
+          <div style="margin-top:1.4rem">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:.6rem" id="comp-mov-title">Movimiento entre semanas</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
+              <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:1rem">
+                <div style="font-size:11px;font-weight:800;color:#166534;margin-bottom:.5rem">Vacantes cubiertas (ya no aparecen, siguen en el archivo)</div>
+                <div id="comp-resueltas" style="font-size:12px;max-height:200px;overflow-y:auto"></div>
+              </div>
+              <div style="background:#FFF1F2;border:1.5px solid #FECDD3;border-radius:12px;padding:1rem">
+                <div style="font-size:11px;font-weight:800;color:#9F1239;margin-bottom:.5rem">Posiciones eliminadas (ya no existen en el archivo)</div>
+                <div id="comp-eliminadas" style="font-size:12px;max-height:200px;overflow-y:auto"></div>
+              </div>
+              <div style="background:#FFF7ED;border:1px solid #FDE68A;border-radius:12px;padding:1rem">
+                <div style="font-size:11px;font-weight:800;color:#92400E;margin-bottom:.5rem">Vacantes nuevas (de nueva creación)</div>
+                <div id="comp-nuevas" style="font-size:12px;max-height:200px;overflow-y:auto"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="export-bar" style="margin-top:1.4rem">
+            <div>
+              <div class="export-bar-title">Exportar Comparativo Semanal</div>
+              <div class="export-bar-sub">Genera reporte PDF con las gráficas de tendencia, la tabla comparativa y el movimiento entre semanas</div>
+            </div>
+            <button class="btn-export-word" id="btn-comp-export-pdf" onclick="exportarComparativoPDF()" style="background:#1B4F9C">
+              Exportar PDF
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <!-- /COMPARATIVO SEMANAL -->
+
+</div><!-- /panel-semaforo -->
+
+
+<!-- ═══════════════════════ PESTAÑA 2: DETALLE DE POSICIONES ═══════════════════════ -->
+<div class="tab-panel" id="panel-detalle">
+
+  <!-- UPLOAD DETALLE (informativo: los datos llegan automáticamente desde la carga en la pestaña Semáforo) -->
+  <div id="det-upload-section">
+    <input type="file" id="detFileInput" accept=".xlsx,.xls" style="display:none">
+    <p class="upload-title">Aún no hay datos cargados</p>
+    <p class="upload-sub">
+      Sube tu Excel una sola vez desde la pestaña <strong>Semáforo</strong> y este detalle se generará automáticamente.<br>
+      <small style="color:#aaa">Todos los complejos: Norte · Centro · Sur · Corporativo · Polanco</small>
+    </p>
+    <button class="btn-upload" onclick="switchTab('semaforo',document.getElementById('tab-btn-semaforo'))">Ir a Semáforo para cargar el archivo</button>
+  </div>
+
+  <div id="det-file-badge">
+    <span>Archivo:</span>
+    <span class="fname" id="det-fname-text"></span>
+    <button id="det-btn-reset" onclick="resetAllData()" title="Cargar otro" style="background:none;border:none;cursor:pointer;color:#bbb;font-size:20px;margin-left:auto">✕</button>
+  </div>
+  <div id="det-error-box"></div>
+
+  <!-- DASHBOARD DETALLE -->
+  <div id="det-dashboard">
+
+    <!-- KPIs -->
+    <div class="det-kpi-grid" id="det-kpi-grid">
+      <div class="det-kpi dk-total">
+        <div class="det-kpi-lbl">Total Posiciones</div>
+        <div class="det-kpi-num" id="det-total">0</div>
+        <div class="det-kpi-sub">Todos los complejos</div>
+      </div>
+      <div class="det-kpi dk-vacantes">
+        <div class="det-kpi-lbl">Total Vacantes</div>
+        <div class="det-kpi-num" id="det-vacantes">0</div>
+        <div class="det-kpi-sub">Posiciones sin ocupar</div>
+      </div>
+      <div class="det-kpi dk-ocupadas">
+        <div class="det-kpi-lbl">Total Ocupadas</div>
+        <div class="det-kpi-num" id="det-ocupadas">0</div>
+        <div class="det-kpi-sub">Posiciones cubiertas</div>
+      </div>
+      <div class="det-kpi dk-planta">
+        <div class="det-kpi-lbl">Planta</div>
+        <div class="det-kpi-num" id="det-planta">0</div>
+        <div class="det-kpi-sub">Tipo clasificación</div>
+      </div>
+      <div class="det-kpi dk-eventual">
+        <div class="det-kpi-lbl">Eventual</div>
+        <div class="det-kpi-num" id="det-eventual">0</div>
+        <div class="det-kpi-sub">Tipo clasificación</div>
+      </div>
+    </div>
+
+    <!-- % COBERTURA POR COMPLEJO + NACIONAL -->
+    <div style="background:#F8FAFC;border:1px solid var(--p-border);border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.2rem">
+      <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p-blue);margin-bottom:1rem">% de Cobertura por Complejo &middot; Nacional</div>
+      <div class="chart-flex-row" style="height:260px">
+        <div class="chart-canvas-col" style="position:relative"><canvas id="det-chart-cobertura"></canvas></div>
+        <div class="chart-side-stats" id="det-chart-cobertura-stats" style="width:190px"></div>
+      </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="det-filter-bar">
+      <label>Complejo</label>
+      <select id="det-sel-complejo" onchange="detApplyFilters()">
+        <option value="">Todos</option>
+        <option value="Norte">Norte</option>
+        <option value="Centro">Centro</option>
+        <option value="Sur">Sur</option>
+        <option value="Corporativo">Corporativo</option>
+        <option value="Polanco">Polanco</option>
+      </select>
+      <label>Estado</label>
+      <select id="det-sel-estado" onchange="detApplyFilters()">
+        <option value="">Todos</option>
+        <option value="VACANTE">Solo Vacantes</option>
+        <option value="OCUPADA">Solo Ocupadas</option>
+      </select>
+      <label>Clasificación</label>
+      <select id="det-sel-clasif" onchange="detApplyFilters()">
+        <option value="">Todas</option>
+        <option value="PLANTA">Planta</option>
+        <option value="EVENTUAL">Eventual</option>
+      </select>
+      <div class="det-search-wrap">
+        <input type="text" id="det-search" placeholder="Buscar posición, localidad, gerente, descripción..." oninput="detApplyFilters()">
+      </div>
+      <button onclick="detClearFilters()" style="padding:7px 14px;border:1.5px solid var(--p-border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;font-weight:700;color:var(--p-gray)">✕ Limpiar</button>
+    </div>
+
+    <!-- ACORDEONES POR COMPLEJO -->
+    <div id="det-complejos-wrap"></div>
+
+    <!-- EXPORT BAR DETALLE -->
+    <div class="det-export-bar">
+      <div>
+        <div class="export-bar-title">Exportar Detalle de Posiciones</div>
+        <div class="export-bar-sub" id="det-export-sub">Genera reporte PDF con todas las posiciones filtradas</div>
+      </div>
+      <button class="btn-export-word" id="btn-det-export-pdf" onclick="exportarDetallePDF()" style="background:#003087">
+        Exportar PDF
+      </button>
+    </div>
+
+  </div><!-- /det-dashboard -->
+</div><!-- /panel-detalle -->
+
+
+<!-- ═══════════════════════ PESTAÑA 3: ANÁLISIS DE PROYECTOS ═══════════════════════ -->
+<div class="tab-panel" id="panel-proyectos">
+
+  <div id="project-empty" class="project-empty">
+    <strong>Aún no hay datos cargados</strong>
+    Sube tu Excel una sola vez desde la pestaña Semáforo y este status de proyectos se generará automáticamente (solo posiciones Eventuales, Área 2M y 4M).
+    <div style="margin-top:1rem">
+      <input type="file" id="projectFileInput" accept=".xlsx,.xls" style="display:none">
+      <button class="btn-upload" onclick="switchTab('semaforo',document.getElementById('tab-btn-semaforo'))">Ir a Semáforo para cargar el archivo</button>
+    </div>
+  </div>
+
+  <div id="project-dashboard" style="display:none">
+    <div class="project-kpi-grid">
+      <div class="project-kpi pk-total"><div class="project-kpi-lbl">Proyectos</div><div class="project-kpi-num" id="project-total-projects">0</div><div class="project-kpi-sub">Eventuales &middot; Área 2M / 4M</div></div>
+      <div class="project-kpi pk-vencida"><div class="project-kpi-lbl">Vencidas</div><div class="project-kpi-num" id="project-vencidas">0</div><div class="project-kpi-sub">Posiciones vencidas</div></div>
+      <div class="project-kpi pk-vigente"><div class="project-kpi-lbl">Vigentes</div><div class="project-kpi-num" id="project-vigentes">0</div><div class="project-kpi-sub">Posiciones vigentes</div></div>
+      <div class="project-kpi pk-vacante"><div class="project-kpi-lbl">Vacantes</div><div class="project-kpi-num" id="project-vacantes">0</div><div class="project-kpi-sub">Por cubrir en proyectos</div></div>
+    </div>
+
+    <div class="project-kpi-extra" id="project-otras-circunstancias">
+      <div class="project-kpi-extra-title">Otras Posiciones por Circunstancia &middot; Global &middot; Clic para filtrar</div>
+      <div class="project-kpi-extra-grid">
+        <div class="poc-item" id="poc-item-proyecto" onclick="setProjCircunstancia('proyecto')"><div class="poc-num" id="poc-proyecto">0</div><div class="poc-lbl">Proyecto</div></div>
+        <div class="poc-item" id="poc-item-incapacidad" onclick="setProjCircunstancia('incapacidad')"><div class="poc-num" id="poc-incapacidad">0</div><div class="poc-lbl">Incapacidad</div></div>
+        <div class="poc-item" id="poc-item-globaltalent" onclick="setProjCircunstancia('globaltalent')"><div class="poc-num" id="poc-globaltalent">0</div><div class="poc-lbl">Global Talent</div></div>
+        <div class="poc-item" id="poc-item-capacitacion" onclick="setProjCircunstancia('capacitacion')"><div class="poc-num" id="poc-capacitacion">0</div><div class="poc-lbl">Capacitación</div></div>
+        <div class="poc-item poc-total" id="poc-item-total" onclick="setProjCircunstancia('')"><div class="poc-num" id="poc-total">0</div><div class="poc-lbl">Total</div></div>
+      </div>
+    </div>
+
+    <div id="project-zona-bar" class="zona-bar" style="margin-bottom:1rem"></div>
+
+    <div class="det-filter-bar">
+      <label>Estatus</label>
+      <select id="project-sel-estatus" onchange="projectApplyFilters()"><option value="">Todos</option><option value="VENCIDA">Vencida</option><option value="VIGENTE">Vigente</option></select>
+      <label>Gerente</label>
+      <select id="project-sel-gerente" onchange="projectApplyFilters()"><option value="">Todos</option></select>
+      <label>Localidad</label>
+      <select id="project-sel-localidad" onchange="projectApplyFilters()"><option value="">Todas</option></select>
+      <span id="project-localidad-count" style="font-size:12px;font-weight:700;color:var(--p-blue)" aria-live="polite"></span>
+      <div class="det-search-wrap"><input type="text" id="project-search" placeholder="Buscar gerente, proyecto, razón o acción..." oninput="projectApplyFilters()"></div>
+      <button onclick="projectClearFilters()" style="padding:7px 14px;border:1.5px solid var(--p-border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;font-weight:700;color:var(--p-gray)">✕ Limpiar</button>
+    </div>
+
+    <div id="project-circ-filter-chip" style="display:none;margin-bottom:12px"></div>
+    <div id="project-complejos-wrap"></div>
+
+    <div class="det-export-bar">
+      <div>
+        <div class="export-bar-title">Exportar Análisis de Proyectos</div>
+        <div class="export-bar-sub" id="project-export-sub">Genera reporte PDF dividido por Complejo y Gerencia, con plan de acción</div>
+      </div>
+      <button class="btn-export-word" id="btn-project-export-pdf" onclick="exportarProyectosPDF()" style="background:#6D28D9">
+        Exportar PDF
+      </button>
+    </div>
+  </div>
+</div><!-- /panel-proyectos -->
+</main>
+<footer>Pilgrims &middot; Atraccion de Talento &middot; Control de Vacantes</footer>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
